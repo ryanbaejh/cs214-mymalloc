@@ -20,14 +20,52 @@ typedef struct chunk_header {
 static chunk_header *head = NULL; // Pointer to the head of the linked list
 
 void initialize_heap() {
-    // Initialize the heap as previously discussed
+    head = (chunk_header *)heap.bytes;  // Point head to the start of the heap and treat bytes pointer to chunk_header structure
+    head->size = MEMLENGTH;             // Set the size to the total heap size
+    head->is_free = true;               // Mark the entire heap as free initially
+    head->next = NULL;                  // There is no next chunk initially
 }
 
 void *mymalloc(size_t size, char *file, int line) {
-    // Implement malloc logic
+    //Initialize the heap if it hasn't been done yet
+    if (head == NULL) {
+        initialize_heap();
+    }
+    //Align to multiple of 8
+    size_t aligned_size = (size + 7) & ~7;  // Round up to nearest multiple of 8
+    size_t chunk_size = aligned_size + sizeof(chunk_header);  // Include header size
+
+    //Traverse the linked list to find a suitable free chunk
+    chunk_header *current = head;
+    while (current != NULL) {
+        if (current->is_free && current->size >= chunk_size) {
+            //If the chunk is larger than needed, split it
+            if (current->size > chunk_size + sizeof(chunk_header)) {
+                //Create a new chunk in the remaining space
+                chunk_header *new_chunk = (chunk_header *)((char *)current + chunk_size); //Increments new_chucnk pointer by amount of allocated memory 
+    
+                new_chunk->size = current->size - chunk_size; //How much space is left in new_chunk
+                new_chunk->is_free = true; //Sets new chunk to be free
+                new_chunk->next = current->next; //Fixes structure of linked list - points new chunk to chunk right after
+                current->next = new_chunk;
+                current->size = chunk_size;
+            }
+
+            //Mark current chunk as allocated and returns a pointer at the allocated memory payload
+            current->is_free = false;
+            return (void *)((char *)current + sizeof(chunk_header));
+        }
+        current = current->next;
+    }
+
+    // If no suitable chunk was found, print an error and return NULL
+    fprintf(stderr, "malloc: Unable to allocate %zu bytes (%s:%d)\n", size, file, line);
+    return NULL;
 }
+
+
+
 
 void myfree(void *ptr, char *file, int line) {
     // Implement free logic
 }
-
