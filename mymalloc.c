@@ -1,8 +1,8 @@
-#include "mymalloc.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "mymalloc.h"
 
 #define MEMLENGTH 4096
 
@@ -27,6 +27,18 @@ void initialize_heap() {
     head->next = NULL;                  // There is no next chunk initially
 }
 
+void coalesce(chunk_header *current);
+
+void print_heap_state() {
+    chunk_header *current = head;
+    printf("Heap state:\n");
+    while (current != NULL) {
+        printf("Chunk at %p: size = %zu, is_free = %d\n", (void *)current, current->size, current->is_free);
+        current = current->next;
+    }
+    printf("-------------------------\n");
+}
+
 void *mymalloc(size_t size, char *file, int line) {
     //Initialize the heap if it hasn't been done yet
     if (head == NULL) {
@@ -41,7 +53,7 @@ void *mymalloc(size_t size, char *file, int line) {
     while (current != NULL) {
         if (current->is_free && current->size >= chunk_size) {
             //If the chunk is larger than needed, split it
-            if (current->size > chunk_size + sizeof(chunk_header)) {
+            if (current->size >= chunk_size + sizeof(chunk_header)) {
                 //Create a new chunk in the remaining space
                 chunk_header *new_chunk = (chunk_header *)((char *)current + chunk_size); //Increments new_chunk pointer by amount of allocated memory 
     
@@ -58,12 +70,13 @@ void *mymalloc(size_t size, char *file, int line) {
         }
         current = current->next;
     }
+    print_heap_state();
     // If no suitable chunk was found, print an error and return NULL
     fprintf(stderr, "malloc: Unable to allocate %zu bytes (%s:%d)\n", size, file, line);
     return NULL;
 }
 
-void myfree(oid *ptr, char *file, int line) {
+void myfree(void *ptr, char *file, int line) {
     if (ptr == NULL) {
         return;  // Do nothing if the pointer is NULL
     }
@@ -76,6 +89,7 @@ void myfree(oid *ptr, char *file, int line) {
 
     // Step 3: Coalesce adjacent free chunks
     coalesce(current);
+    print_heap_state();
 }
 
 void coalesce(chunk_header *current) {
