@@ -1,8 +1,8 @@
-#include "mymalloc.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include "mymalloc.h"
 
 #define MEMLENGTH 4096
 
@@ -20,11 +20,31 @@ typedef struct chunk_header {
 
 static chunk_header *head = NULL; // Pointer to the head of the linked list
 
+void leak_detector() {
+    size_t total_leaked_bytes = 0;
+    size_t leaked_objects = 0;
+    chunk_header *current = head;
+
+    while (current != NULL) {
+        if (!current->is_free) {
+            total_leaked_bytes += current->size - sizeof(chunk_header);
+            leaked_objects++;
+        }
+        current = current->next;
+    }
+
+    if (leaked_objects > 0) {
+        fprintf(stderr, "mymalloc: %zu bytes leaked in %zu objects.\n", total_leaked_bytes, leaked_objects);
+    }
+}
+
 void initialize_heap() {
     head = (chunk_header *)heap.bytes;  // Point head to the start of the heap and treat bytes pointer to chunk_header structure
     head->size = MEMLENGTH;             // Set the size to the total heap size
     head->is_free = true;               // Mark the entire heap as free initially
     head->next = NULL;                  // There is no next chunk initially
+
+    atexit(leak_detector);
 }
 
 void *mymalloc(size_t size, char *file, int line) {
@@ -63,26 +83,11 @@ void *mymalloc(size_t size, char *file, int line) {
     return NULL;
 }
 
-void myfree(oid *ptr, char *file, int line) {
-    if (ptr == NULL) {
-        return;  // Do nothing if the pointer is NULL
-    }
-
-    // Step 1: Locate the chunk header for the given pointer
-    chunk_header *current = (chunk_header *)((char *)ptr - sizeof(chunk_header));
-
-    // Step 2: Mark the chunk as free
-    current->is_free = true;
-
-    // Step 3: Coalesce adjacent free chunks
-    coalesce(current);
-}
-
 void coalesce(chunk_header *current) {
     // Coalesce with the next chunk if it's free
     if (current->next != NULL && current->next->is_free) {
         // Merge current chunk with the next chunk
-        current->size += current->next->size + sizeof(chunk_header);
+        current->size += current->next->size;
         current->next = current->next->next;
     }
 
@@ -94,7 +99,50 @@ void coalesce(chunk_header *current) {
     }
 
     if (prev != NULL && prev->is_free) {
-        prev->size += current->size + sizeof(chunk_header);
+        prev->size += current->size;
         prev->next = current->next;
     }
 }
+
+void myfree(void *ptr, char *file, int line) {
+    if (ptr == NULL) {
+        return; // No action needed for NULL pointers
+    }
+
+    // Calculate the chunk header address from the payload pointer
+    chunk_header *chunk = (chunk_header *)((char *)ptr - sizeof(chunk_header));
+
+    //Calling free() with an address not obtained from malloc()
+    chunk_header *current = head;
+    bool valid_pointer = false;
+    while (current != NULL) {
+        if (current == chunk) {
+            valid_pointer = true; //Pointer found in the linked list
+            break;
+        }
+        current = current->next;
+    }
+
+    if (!valid_pointer) {
+        fprintf(stderr, "myfree: Inappropriate pointer (%s:%d)\n", file, line);
+        exit(2); // Exit with an error
+    }
+
+    //Calling free() with an address not at the start of a chunk
+    if ((char *)ptr != (char *)chunk + sizeof(chunk_header)) {
+        fprintf(stderr, "myfree: Inappropriate pointer (%s:%d)\n", file, line);
+        exit(2); // Exit with an error
+    }
+
+    //Calling free() a second time on the same pointer
+    if (chunk->is_free) {
+        fprintf(stderr, "myfree: Inappropriate pointer (%s:%d)\n", file, line);
+        exit(2); // Exit with an error
+    }
+
+    // Mark chunk as free
+    chunk->is_free = true;
+    coalesce(current);
+}
+
+

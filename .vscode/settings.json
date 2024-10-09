@@ -1,6 +1,7 @@
 {
     "files.associations": {
-        "stddef.h": "c"
+        "stddef.h": "c",
+        "mymalloc.h": "c"
     },
-    "C_Cpp.default.compilerPath": "cl.exe"
+    "C_Cpp.default.compilerPath": "C:\\mingw64\\bin\\gcc.exe"
 }
