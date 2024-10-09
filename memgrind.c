@@ -27,3 +27,5 @@ int *arr = (int *)mymalloc(10 * sizeof(int));  // Allocating memory
 // Use the memory...
 myfree(arr);  // Freeing the memory when no longer needed
 
+
+

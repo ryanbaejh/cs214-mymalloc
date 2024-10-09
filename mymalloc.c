@@ -2,6 +2,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdlib.h>
+#include <stdio.h>
 
 #define MEMLENGTH 4096
 
@@ -62,7 +63,7 @@ void *mymalloc(size_t size, char *file, int line) {
     return NULL;
 }
 
-void myfree(void *ptr) {
+void myfree(oid *ptr, char *file, int line) {
     if (ptr == NULL) {
         return;  // Do nothing if the pointer is NULL
     }
