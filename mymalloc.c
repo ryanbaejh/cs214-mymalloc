@@ -42,7 +42,7 @@ void *mymalloc(size_t size, char *file, int line) {
             //If the chunk is larger than needed, split it
             if (current->size > chunk_size + sizeof(chunk_header)) {
                 //Create a new chunk in the remaining space
-                chunk_header *new_chunk = (chunk_header *)((char *)current + chunk_size); //Increments new_chucnk pointer by amount of allocated memory 
+                chunk_header *new_chunk = (chunk_header *)((char *)current + chunk_size); //Increments new_chunk pointer by amount of allocated memory 
     
                 new_chunk->size = current->size - chunk_size; //How much space is left in new_chunk
                 new_chunk->is_free = true; //Sets new chunk to be free
@@ -53,19 +53,47 @@ void *mymalloc(size_t size, char *file, int line) {
 
             //Mark current chunk as allocated and returns a pointer at the allocated memory payload
             current->is_free = false;
-            return (void *)((char *)current + sizeof(chunk_header));
+            return (void *)((char *)current + sizeof(chunk_header)); //returns location of payload in heap as a pointer
         }
         current = current->next;
     }
-
     // If no suitable chunk was found, print an error and return NULL
     fprintf(stderr, "malloc: Unable to allocate %zu bytes (%s:%d)\n", size, file, line);
     return NULL;
 }
 
+void myfree(void *ptr) {
+    if (ptr == NULL) {
+        return;  // Do nothing if the pointer is NULL
+    }
 
+    // Step 1: Locate the chunk header for the given pointer
+    chunk_header *current = (chunk_header *)((char *)ptr - sizeof(chunk_header));
 
+    // Step 2: Mark the chunk as free
+    current->is_free = true;
 
-void myfree(void *ptr, char *file, int line) {
-    // Implement free logic
+    // Step 3: Coalesce adjacent free chunks
+    coalesce(current);
+}
+
+void coalesce(chunk_header *current) {
+    // Coalesce with the next chunk if it's free
+    if (current->next != NULL && current->next->is_free) {
+        // Merge current chunk with the next chunk
+        current->size += current->next->size + sizeof(chunk_header);
+        current->next = current->next->next;
+    }
+
+    // Coalesce with the previous chunk if it's free
+    chunk_header *prev = head;
+    //Traverse Linked List until it's before current
+    while (prev != NULL && prev->next != current) {
+        prev = prev->next;
+    }
+
+    if (prev != NULL && prev->is_free) {
+        prev->size += current->size + sizeof(chunk_header);
+        prev->next = current->next;
+    }
 }
