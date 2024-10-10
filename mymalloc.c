@@ -2,6 +2,9 @@
 #include <stddef.h>
 #include <stdlib.h>
 #include <stdio.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
 #include "mymalloc.h"
 
 #define MEMLENGTH 4096
@@ -106,7 +109,7 @@ void coalesce(chunk_header *current) {
 
 void myfree(void *ptr, char *file, int line) {
     if (ptr == NULL) {
-        return; // No action needed for NULL pointers
+        return; // No action needed for NULL pointer
     }
 
     // Calculate the chunk header address from the payload pointer
@@ -124,20 +127,20 @@ void myfree(void *ptr, char *file, int line) {
     }
 
     if (!valid_pointer) {
-        fprintf(stderr, "myfree: Inappropriate pointer (%s:%d)\n", file, line);
-        exit(2); // Exit with an error
+        fprintf(stderr, "free: Inappropriate pointer (%s:%d)\n", file, line);
+        exit(2);
     }
 
     //Calling free() with an address not at the start of a chunk
     if ((char *)ptr != (char *)chunk + sizeof(chunk_header)) {
-        fprintf(stderr, "myfree: Inappropriate pointer (%s:%d)\n", file, line);
-        exit(2); // Exit with an error
+        fprintf(stderr, "free: Inappropriate pointer (%s:%d)\n", file, line);
+        exit(2);
     }
 
     //Calling free() a second time on the same pointer
     if (chunk->is_free) {
-        fprintf(stderr, "myfree: Inappropriate pointer (%s:%d)\n", file, line);
-        exit(2); // Exit with an error
+        fprintf(stderr, "free: Inappropriate pointer (%s:%d)\n", file, line);
+        exit(2);
     }
 
     // Mark chunk as free
