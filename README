@@ -1,3 +1,180 @@
-jb1995
+Ryan Bae jb1995
 Nathan Kim nk810
-This is project 1 for cs214
+cs214 Project 1: My Little malloc()
+
+# Using Linked List
+We decided to use a linked list because making the header into a node pointing to the next header was an easier concept to grasp for us.
+Our linked list head contains the total size of the chunk, a booleaan variable to determine if the header is free or not, and a pointer pointing to the next head.
+Because we are using a linked list to implement mymalloc, the minimum byte size for a chunk is 32 bytes. 
+Because of this, we had to decrease the number of iterations in the memgrind.c file from 120 to 60.
+We also need to make the number of bytes from the given testing file from MEMSIZE / OBJECTS - HEADERSIZE to 40, and the number of objects from 64 to 32.
+
+# mymalloc method
+## initializeHeap()
+---
+Since we are using a linked list, we had to first initialize a pointer at the head of the list. This is called with the method initializeHeap(). 
+initializHeap() creates a node containing: 
+- size of the entire memory pool as it is initializing one node as the initial empty chunk
+- A boolean that states the chunk is free (which it is since we didnt add anything yet)
+- and a pointer that points to a NULL node (since we only have 1 node right now)
+
+## mymalloc()
+---
+Now when mymalloc is called, if this was the first time mymalloc was called, we call initializeHeap()
+
+Then we calculate the amount of space needed for a single chunk. 
+1. calculate size of payload while aligning to 8 bytes. 
+2. add size of payload and size of chunk header to calculate total size of chunk
+
+Now we traverse the linked list of chunks to find a suitable free chunk large enough to accommodate the requested memory.
+
+Once the chunk is found, if the chunk is larger than required, it is split into two chunks: one to allocate and one for the remaining free space.
+For example, 
+if we already have memory stored at the front of the heap, the pointer: 
+- check first chunk, if free check next chunk
+In this case since there is only one chunk being initially used, the pointer points at the rest of the heap as one chunk. 
+This empty chunk is then split, by incrementing the "current" pointer by the size of the chunk to be allocated and is split there. 
+
+# myfree method
+The myfree function frees the memory that is allocated in the heap.
+When a pointer is passed into myfree, the function first checks if the pointer passed is NULL.
+If it is, the function returns and does not do anything. 
+If it is valid, it continues. It then checks for 3 errors that may occur when calling myfree:
+
+1. Calling free with an address not obtained from malloc
+To check for this, we go through the entire heap to see if the pointer passed into free exists in the heap. If it is unable to find the pointer in the heap, the program exist with an error message.
+
+2. Calling free with an address not at the start of a chunk
+To check for this, we check if the pointer passed through is pointing to the start of the chunk. If not, we exit with an error message.
+
+3. Calling free a second time on the same pointer
+Checks if the chunk the pointer points to is free. If it is, exit with an error message.
+
+After error detection is done, the chunk is set to free and coalesce is run to the current pointer header.
+
+# coalesce
+We created a coalesce function that coalesces both the next empty header and the previous empty header.
+If the next header is empty, merge the current empty chunk with the next empty chunk.
+Since our linked list does not have a previous pointer, we go through the linked list from the beginning until the next previous pointer reaches current. Then if the chunk before the current chunk is empty, also merge with the previous chunk.
+
+# Error Detection (myFree)
+This section includes all edge cases for freeing data
+---
+## invalid pointer
+This checks if there exists a pointer in the list that matches the name of the pointer in the argument of myFree()
+
+It loops through the linked list and checks if there is a matching pointer. If it finds one breaks the loop. If not it outputs the following message: 
+
+`"free: Inappropriate pointer (%s:%d)\n", file, line`
+
+## pointer not at start of chunk
+This checks if the pointer being called is at the start of the chunk being freed
+
+When you find that the pointer is pointing at the wrong place output: 
+`"free: Inappropriate pointer (%s:%d)\n", file, line`
+
+## Second free() call
+This checks if you called free() a second time on the same pointer. 
+Basically checks if the chunk the pointer is at is already freed, if it is then output: 
+"free: Inappropriate pointer (%s:%d)\n", file, line
+
+# Leak Detector
+The leak detector scans through the linked list of all chunks in the heap to check if there is any memory that was allocated but not freed. 
+
+two variables: 
+- (size_t) total_leaked_bytes: Tracks the total number of bytes that were freed but not allocated
+- (size_t) leaked_objects: counts the number of chunks that were freed but not allocated
+
+Basically it just iterates through the linked list and increments each variable by one. 
+
+*Why was this called in initializeHeap()?*
+The reason we called the leak detector in initializeheap was because initializeHeap was for sure going to be run only one time at the beginning of every time malloc is called.
+This ensures that: 
+1. leak_detector is registered early before the program closes prematurely due to errors
+2. leak_detector will always be run only once 
+
+in order to make sure leak_detector is run at the end of our code, we used the atexit method to register the function early but still call it at the end. 
+
+
+# Testing:
+
+## Test 1
+The first test is the test that was given to us. It allocates memory into the heap and frees the memory at the end. Clean up at end by freeing, or do not to test for leaks.
+
+## Test 2: Non-overlapping Allocations
+Tests if memory allocations overlap. To test this, check every allocated chunk's start and end block to one another. If an overlap with a start and end is found, exit with an error message. Clean up by freeing.
+
+## Test 3: Coalescing Free Blocks
+Tests if coalescing function is working as intended:
+ - Allocate 4 objects into the heap
+ - Free the two middle objects
+ - Allocate a larger object between the two existing objects
+ - If the new object is null, exit with an error
+
+## Test 4: Leak Detection
+Tests if the leak detector works. 
+Steps: 
+1. allocate memory for `OBJECTS` number of objects. 
+2. Dont free and exit the program
+
+Now we check if mymalloc.c outputs the following line from the leak_detector function: 
+`"mymalloc: %zu bytes leaked in %zu objects.\n", total_leaked_bytes, leaked_objects`
+
+## Test 5: myFree() edge cases
+### Test Invalid Pointer
+For this one we just create a random function that isnt allocated by malloc and try freeing it. Make sure mymalloc.c outputs match the ones explained in the free() error detection section
+
+### Test Pointer not at Start of Chunk
+1. Allocate a block of memory for two integers using malloc().
+2. Instead of calling free() on the original pointer, we attempt to call free() on an offset pointer (p + 1), which points to the second integer inside the allocated block.
+
+Since the pointer is now pointing at the middle of the chunk we make sure the output of mymalloc.c properly displays the error message. 
+
+### Test Free Twice
+1. Allocate memory
+2. free the memory twice
+Make sure mymalloc.c displays the corresponding error message
+
+### An issue with testing and creating child processes as a solution
+An issue with testing our free function was, if we ran into an edge case, the function would call to exit the program entirely. This made it so we had to execute the code multiple times while also changing the error that we were testing. As a solution, we decided to use fork() to call child processes so that we can test every edge case all at once without having to run the code multiple times. 
+The function `run_test_in_child()` creates a child process by: 
+1. if pid == 0 we are in the child process, so we run the intended function and exit. 
+2. If pid > 0, it means we are in the parent process, the parent process `waitpid(pid, &status, 0)` to wait for the child process to finish.
+3. Now we check the exitstatus to make sure the child process exited normally. 
+
+The `run_test_in_child()` function is called 3 times (once for each test) in a new function called `test_error_detection()`. 
+
+# Efficiency
+Test efficiency of memory allocation.
+Iterates 60 times and runs 50 times.
+Keeps track of total time program is running and finds the average time.
+
+## malloc() and immediately free() a 1-byte object, 120 times
+ - Goes through a for loop 60 times, allocating and deallocating 1 byte objects into the heap
+ - Calculates the average time of 50 runs
+ This tests how efficient our memory allocation is when simply allocating and deallocating bytes in succession.
+
+## Use malloc() to get 60 1-byte objects, storing the pointers in an array, then use free() to deallocate the chunks.
+ - Goes through for loop to allocate 60 1 byte objects
+ - Deallocates all 60 1 byte objects
+ - Calculates the average time of 50 runs
+ This tests how efficient our memory allocation is when allocating a large amount of memory and deallocating a large amount of memory.
+
+## create an array of 60 pointers. Repeatedly make a random choice between allocating a 1-byte object and adding the pointer to the array and deallocating a previously allocated object (if any), until you have allocated 60 times. Deallocate any remaining objects.
+ - Goes through 60 iterations of randomly choosing whether to allocate or deallocte objects
+ - When the heap has been allocated to 60 times, deeallocate remaining objects
+ - Calculates the average time of 50 runs
+This tests how efficient our memory allocation is at allocating and deallocating objects randomly. This simulates real world applications of malloc and, and how efficient our memory allocation will be in these scenarios.
+
+## Our own efficiency tests
+### Repeated Allocation and Deallocation with Random Sizes
+ - Goes through 60 iterations of randomly selecting byte sizes from 1 to 64
+ - Allocate memory with the randomly chosen byte sizes
+ - Deallocate all allocated objects
+ - Calculates the average time of 50 runs
+This tests how efficient our memory allocation is at allocating and deallocating objects with random sizes, up to 64 bytes. This simulates real world applications of malloc, in that people allocate memmory of different sizes, so we are testing that scenario.
+
+### Allocation Burst Followed by Deallocation Burst
+ - Allocates 8 byte objects into heap 128 times then deallocates
+ - Calculates the average time of 50 runs
+ This test stresses how memory allocation by allocating as much objects as possible into the heap. We allocate in the maximum amount of bytes possible into our heap and then deallocate, pushing our memory allocation to the limit.

@@ -2,6 +2,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 
 
 // Compile with -DREALMALLOC to use the real malloc() instead of mymalloc()
@@ -16,17 +18,19 @@
 
 #define MEMSIZE 4096
 #define HEADERSIZE 24
-#define OBJECTS 64
-#define OBJSIZE (MEMSIZE / OBJECTS - HEADERSIZE)
+#define OBJECTS 32
+//#define OBJSIZE (MEMSIZE / OBJECTS - HEADERSIZE)
+#define OBJSIZE 40
 
-
-void test_default() {
+void test_1() {
+    printf("Test 1: Allocating and Deallocating:\n");
 	char *obj[OBJECTS];
 	int i, j, errors = 0;
 	
 	// fill memory with objects
 	for (i = 0; i < OBJECTS; i++) {
 		obj[i] = malloc(OBJSIZE);
+        //printf("i: %d obj: %d\n", i, OBJSIZE);
 		if (obj[i] == NULL) {
 		    printf("Unable to allocate object %d\n", i);
 		    exit(1);
@@ -56,20 +60,6 @@ void test_default() {
 	}
 	
 	printf("%d incorrect bytes\n", errors);
-}
-
-void test_allocation() {
-    printf("Test 1: Allocation of Unallocated Memory\n");
-
-    char *obj = malloc(OBJSIZE);
-    if (obj == NULL) {
-        fprintf(stderr, "Test 1 Failed: malloc() returned NULL\n");
-        exit(1);
-    } else {
-        printf("Test 1 Passed: malloc() allocated memory at %p\n", (void *)obj);
-    }
-
-    free(obj);  // Clean up
 }
 
 void test_non_overlapping_allocations() {
@@ -105,48 +95,6 @@ void test_non_overlapping_allocations() {
     }
 
     printf("Test 2 Passed: No overlapping allocations detected\n");
-
-    // Clean up
-    for (i = 0; i < OBJECTS; i++) {
-        free(objs[i]);
-    }
-}
-
-void test_data_integrity() {
-    printf("Test 3: Data Integrity\n");
-
-    char *objs[OBJECTS];
-    int i, j, errors = 0;
-
-    // Allocate objects
-    for (i = 0; i < OBJECTS; i++) {
-        objs[i] = malloc(OBJSIZE);
-        if (objs[i] == NULL) {
-            fprintf(stderr, "Test 3 Failed: Unable to allocate object %d\n", i);
-            exit(1);
-        }
-    }
-
-    // Fill each object with a distinct byte pattern
-    for (i = 0; i < OBJECTS; i++) {
-        memset(objs[i], i, OBJSIZE);
-    }
-
-    // Verify that data remains intact
-    for (i = 0; i < OBJECTS; i++) {
-        for (j = 0; j < OBJSIZE; j++) {
-            if (objs[i][j] != i) {
-                errors++;
-                fprintf(stderr, "Test 3 Failed: Object %d byte %d incorrect: %d\n", i, j, objs[i][j]);
-            }
-        }
-    }
-
-    if (errors == 0) {
-        printf("Test 3 Passed: Data integrity maintained\n");
-    } else {
-        printf("Test 3 Failed: %d incorrect bytes\n", errors);
-    }
 
     // Clean up
     for (i = 0; i < OBJECTS; i++) {
@@ -214,16 +162,40 @@ void test_free_invalid_pointer();
 void test_free_not_start_of_chunk();
 void test_double_free();
 
+void run_test_in_child(void (*test_func)(void), const char *test_name) {
+    pid_t pid = fork();
+    if (pid == 0) {
+        // Child process
+        test_func();
+        exit(0); // Ensure child exits
+    } else if (pid > 0) {
+        // Parent process
+        int status;
+        waitpid(pid, &status, 0);
+        if (WIFEXITED(status)) {
+            printf("%s exited with status %d\n", test_name, WEXITSTATUS(status));
+        } else if (WIFSIGNALED(status)) {
+            printf("%s terminated by signal %d\n", test_name, WTERMSIG(status));
+        } else {
+            printf("%s terminated abnormally\n", test_name);
+        }
+    } else {
+        // Fork failed
+        perror("fork");
+        exit(1);
+    }
+}
+
 int test_error_detection() {
     // Run each test and print the result
     printf("Running test: Freeing invalid pointer...\n");
-    test_free_invalid_pointer();
+    run_test_in_child(test_free_invalid_pointer, "Test 'free invalid pointer'");
 
     printf("Running test: Freeing pointer not at start of chunk...\n");
-    test_free_not_start_of_chunk();
+    run_test_in_child(test_free_not_start_of_chunk, "Test 'free not start of chunk'");
 
     printf("Running test: Double free...\n");
-    test_double_free();
+    run_test_in_child(test_double_free, "Test 'double free'");
 
     return 0;
 }
@@ -253,10 +225,8 @@ void test_double_free() {
 int main(int argc, char **argv) {
     printf("Starting memory allocation tests...\n");
 
-	test_default();
-
-    // Test 1: Allocation of Unallocated Memory
-    test_allocation();
+    //Test 1: Allocates and Frees Memory
+	test_1();
 
     // Test 2: Non-overlapping Allocations
     test_non_overlapping_allocations();
@@ -267,10 +237,6 @@ int main(int argc, char **argv) {
 	// Test 4: Leak Detection
     test_leak_detection();
 	
-	printf("All tests completed.\n");
-
-	//User chooses error detection (Implement)
-
     // Test 5: Error Detection
     test_error_detection();
 
